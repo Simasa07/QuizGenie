@@ -1,0 +1,22 @@
+# --- Backend (Python / FastAPI) ---
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+backend/.env
+backend/uploads/*.pdf
+
+# --- Android ---
+android/*.iml
+android/.gradle/
+android/local.properties
+android/.idea/
+android/app/build/
+android/build/
+android/.externalNativeBuild/
+android/.cxx/
+*.iml
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
