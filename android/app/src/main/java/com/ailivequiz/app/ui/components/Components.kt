@@ -117,7 +117,7 @@ fun GlyphBadge(
 /** Shared bottom navigation: Library / History tabs. */
 @Composable
 fun QGBottomBar(
-    currentTab: String, // "library" or "history"
+    currentTab: String, // "library" | "history"
     onLibraryClick: () -> Unit,
     onHistoryClick: () -> Unit
 ) {

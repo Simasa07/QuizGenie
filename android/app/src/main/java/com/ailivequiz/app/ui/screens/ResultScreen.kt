@@ -28,9 +28,11 @@ import com.ailivequiz.app.ui.viewmodel.AppViewModel
 @Composable
 fun ResultScreen(
     viewModel: AppViewModel,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    doneLabel: String = "Back to Library"
 ) {
     val result by viewModel.attemptResult.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
     var showReview by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -57,7 +59,11 @@ fun ResultScreen(
                     .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No result to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isLoading) {
+                    CircularProgressIndicator()
+                } else {
+                    Text("No result to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             return@Scaffold
         }
@@ -131,7 +137,7 @@ fun ResultScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 QGOutlinedButton(
-                    text = "Back to Library",
+                    text = doneLabel,
                     onClick = onDone,
                     modifier = Modifier.fillMaxWidth()
                 )

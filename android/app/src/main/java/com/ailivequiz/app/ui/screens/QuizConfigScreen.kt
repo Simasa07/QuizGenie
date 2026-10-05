@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.ailivequiz.app.ui.screens
 
@@ -6,7 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +21,16 @@ import com.ailivequiz.app.ui.components.GlyphBadge
 import com.ailivequiz.app.ui.components.QGPrimaryButton
 import com.ailivequiz.app.ui.viewmodel.AppViewModel
 
-private val PRESET_COUNTS = listOf(5, 10, 15, 20)
+private val PRESET_COUNTS = listOf(5, 10, 15, 20, 25, 30)
+private val PRESET_MINUTES = listOf(5, 10, 15, 20, 30, 45)
+
+private data class DifficultyOption(val value: String, val label: String)
+private val DIFFICULTY_OPTIONS = listOf(
+    DifficultyOption("mixed", "Mixed"),
+    DifficultyOption("easy", "Easy"),
+    DifficultyOption("medium", "Medium"),
+    DifficultyOption("hard", "Hard")
+)
 
 @Composable
 fun QuizConfigScreen(
@@ -29,6 +40,8 @@ fun QuizConfigScreen(
     onBack: () -> Unit
 ) {
     var numQuestions by remember { mutableIntStateOf(10) }
+    var timeLimitMinutes by remember { mutableIntStateOf(10) }
+    var difficulty by remember { mutableStateOf("mixed") }
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val documents by viewModel.documents.collectAsState()
@@ -54,6 +67,7 @@ fun QuizConfigScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -70,35 +84,62 @@ fun QuizConfigScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                "How many questions?",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.align(Alignment.Start)
-            )
-            Text(
-                "Choose between 1-20",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Start)
-            )
+            // --- Question count ---
+            SectionLabel(title = "How many questions?", subtitle = "Choose between 1-30")
             Spacer(modifier = Modifier.height(14.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FlowRowChips {
                 PRESET_COUNTS.forEach { count ->
-                    CountChip(
-                        count = count,
+                    SelectableChip(
+                        label = count.toString(),
                         selected = numQuestions == count,
                         onClick = { numQuestions = count }
                     )
                 }
             }
-
             Spacer(modifier = Modifier.height(10.dp))
-            CustomCountStepper(
+            CustomStepper(
+                label = "Custom:",
                 value = numQuestions,
-                onValueChange = { numQuestions = it.coerceIn(1, 20) }
+                onValueChange = { numQuestions = it.coerceIn(1, 30) }
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- Time limit: a separate, independent choice from question count ---
+            SectionLabel(title = "How much time?", subtitle = "Choose between 1-120 minutes")
+            Spacer(modifier = Modifier.height(14.dp))
+            FlowRowChips {
+                PRESET_MINUTES.forEach { minutes ->
+                    SelectableChip(
+                        label = "${minutes}m",
+                        selected = timeLimitMinutes == minutes,
+                        onClick = { timeLimitMinutes = minutes }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            CustomStepper(
+                label = "Custom:",
+                value = timeLimitMinutes,
+                suffix = " min",
+                onValueChange = { timeLimitMinutes = it.coerceIn(1, 120) }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- Difficulty ---
+            SectionLabel(title = "Difficulty")
+            Spacer(modifier = Modifier.height(10.dp))
+            FlowRowChips {
+                DIFFICULTY_OPTIONS.forEach { option ->
+                    SelectableChip(
+                        label = option.label,
+                        selected = difficulty == option.value,
+                        onClick = { difficulty = option.value },
+                        outlinedStyle = true
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
             Card(
@@ -120,7 +161,7 @@ fun QuizConfigScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
             errorMessage?.let {
                 Text(
@@ -135,7 +176,7 @@ fun QuizConfigScreen(
                 text = if (isLoading) "Generating..." else "✦  Generate Quiz",
                 loading = isLoading,
                 onClick = {
-                    viewModel.generateQuiz(documentId, numQuestions) { quiz ->
+                    viewModel.generateQuiz(documentId, numQuestions, difficulty, timeLimitMinutes) { quiz ->
                         if (quiz != null) onQuizReady(quiz.id)
                     }
                 },
@@ -153,34 +194,83 @@ fun QuizConfigScreen(
 }
 
 @Composable
-private fun CountChip(count: Int, selected: Boolean, onClick: () -> Unit) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondary
+private fun ColumnScope.SectionLabel(title: String, subtitle: String? = null) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.align(Alignment.Start)
+    )
+    if (subtitle != null) {
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.Start)
+        )
+    }
+}
+
+/** Simple wrapping row: chips flow onto a second line instead of overflowing. */
+@Composable
+private fun FlowRowChips(content: @Composable () -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SelectableChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    outlinedStyle: Boolean = false
+) {
+    val bg = when {
+        selected -> MaterialTheme.colorScheme.primary
+        outlinedStyle -> MaterialTheme.colorScheme.surface
+        else -> MaterialTheme.colorScheme.secondary
+    }
+    val fg = when {
+        selected -> MaterialTheme.colorScheme.onPrimary
+        outlinedStyle -> MaterialTheme.colorScheme.onSurface
+        else -> MaterialTheme.colorScheme.onSecondary
+    }
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
 
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .background(bg)
+            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(count.toString(), style = MaterialTheme.typography.titleSmall, color = fg, fontWeight = FontWeight.Bold)
+        Text(label, style = MaterialTheme.typography.titleSmall, color = fg, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-private fun CustomCountStepper(value: Int, onValueChange: (Int) -> Unit) {
+private fun CustomStepper(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    suffix: String = ""
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "Custom:",
+            label,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.width(10.dp))
         StepButton(symbol = "-", onClick = { onValueChange(value - 1) })
         Text(
-            text = value.toString(),
+            text = "$value$suffix",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 16.dp)
         )

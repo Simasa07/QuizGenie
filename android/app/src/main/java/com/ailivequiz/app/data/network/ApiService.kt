@@ -50,5 +50,21 @@ interface ApiService {
     suspend fun getAttempt(@Path("attemptId") attemptId: Int): AttemptResultResponse
 
     @GET("attempts/user/{userId}")
-    suspend fun getAttemptHistory(@Path("userId") userId: Int): List<AttemptHistoryItem>
+    suspend fun getAttemptHistory(
+        @Path("userId") userId: Int,
+        @Query("document_id") documentId: Int? = null
+    ): List<AttemptHistoryItem>
+
+    // ---------- Analytics (V3) ----------
+    @GET("analytics/user/{userId}/topics")
+    suspend fun getTopicStats(
+        @Path("userId") userId: Int,
+        @Query("document_id") documentId: Int? = null
+    ): List<TopicStat>
+
+    @GET("analytics/user/{userId}/overview")
+    suspend fun getOverview(
+        @Path("userId") userId: Int,
+        @Query("document_id") documentId: Int? = null
+    ): OverviewStats
 }

@@ -32,8 +32,13 @@ class QuizRepository {
         api.getDocument(documentId)
     }
 
-    suspend fun generateQuiz(documentId: Int, numQuestions: Int): Result<QuizResponse> = safeCall {
-        api.generateQuiz(QuizGenerateRequest(documentId, numQuestions))
+    suspend fun generateQuiz(
+        documentId: Int,
+        numQuestions: Int,
+        difficulty: String,
+        timeLimitMinutes: Int
+    ): Result<QuizResponse> = safeCall {
+        api.generateQuiz(QuizGenerateRequest(documentId, numQuestions, difficulty, timeLimitMinutes))
     }
 
     suspend fun listQuizzesForDocument(documentId: Int): Result<List<QuizResponse>> = safeCall {
@@ -51,8 +56,21 @@ class QuizRepository {
         api.submitAttempt(attemptId, AttemptSubmitRequest(answers))
     }
 
-    suspend fun getAttemptHistory(userId: Int): Result<List<AttemptHistoryItem>> = safeCall {
-        api.getAttemptHistory(userId)
+    suspend fun getAttemptHistory(userId: Int, documentId: Int? = null): Result<List<AttemptHistoryItem>> = safeCall {
+        api.getAttemptHistory(userId, documentId)
+    }
+
+    /** Fetches a previously-completed attempt so the person can review it again later. */
+    suspend fun getAttempt(attemptId: Int): Result<AttemptResultResponse> = safeCall {
+        api.getAttempt(attemptId)
+    }
+
+    suspend fun getTopicStats(userId: Int, documentId: Int? = null): Result<List<TopicStat>> = safeCall {
+        api.getTopicStats(userId, documentId)
+    }
+
+    suspend fun getOverview(userId: Int, documentId: Int? = null): Result<OverviewStats> = safeCall {
+        api.getOverview(userId, documentId)
     }
 
     private suspend fun <T> safeCall(block: suspend () -> T): Result<T> =

@@ -20,3 +20,6 @@ android/.cxx/
 # --- OS junk ---
 .DS_Store
 Thumbs.db
+
+# Kotlin/Gradle generated files
+android/.kotlin/

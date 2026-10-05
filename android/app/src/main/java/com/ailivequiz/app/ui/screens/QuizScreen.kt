@@ -21,10 +21,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ailivequiz.app.data.model.OptionResponse
+import com.ailivequiz.app.ui.components.QGOutlinedButton
 import com.ailivequiz.app.ui.components.QGPrimaryButton
+import com.ailivequiz.app.ui.theme.ErrorRed
 import com.ailivequiz.app.ui.viewmodel.AppViewModel
+import kotlinx.coroutines.delay
 
 private val OPTION_LETTERS = listOf("A", "B", "C", "D", "E", "F")
+private const val LOW_TIME_WARNING_SECONDS = 30
 
 @Composable
 fun QuizScreen(
@@ -39,6 +43,27 @@ fun QuizScreen(
     val questions = quiz?.questions ?: emptyList()
     var currentIndex by remember(quiz?.id) { mutableIntStateOf(0) }
 
+    // --- Timer state ---
+    var secondsRemaining by remember(quiz?.id) { mutableIntStateOf(quiz?.time_limit_seconds ?: 0) }
+    var hasSubmitted by remember(quiz?.id) { mutableStateOf(false) }
+
+    fun submitNow() {
+        if (hasSubmitted) return
+        hasSubmitted = true
+        viewModel.submitAttempt { onSubmitted() }
+    }
+
+    LaunchedEffect(quiz?.id) {
+        while (secondsRemaining > 0 && !hasSubmitted) {
+            delay(1000)
+            secondsRemaining -= 1
+        }
+        if (!hasSubmitted) {
+            // Time ran out - auto-submit whatever was answered.
+            submitNow()
+        }
+    }
+
     if (questions.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -49,13 +74,14 @@ fun QuizScreen(
     val currentQuestion = questions[currentIndex]
     val isLastQuestion = currentIndex == questions.lastIndex
     val selectedForCurrent = selectedAnswers[currentQuestion.id]
-    val canProceed = selectedForCurrent != null
+    val allAnswered = questions.all { selectedAnswers.containsKey(it.id) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(quiz?.let { "Quiz ${it.quiz_number}" } ?: "Quiz") },
+                actions = { TimerPill(secondsRemaining) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
@@ -72,23 +98,45 @@ fun QuizScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
-                    QGPrimaryButton(
-                        text = when {
-                            isLoading -> "Submitting..."
-                            isLastQuestion -> "✓ Submit Quiz"
-                            else -> "Next →"
-                        },
-                        enabled = canProceed,
-                        loading = isLoading && isLastQuestion,
-                        onClick = {
-                            if (isLastQuestion) {
-                                viewModel.submitAttempt { onSubmitted() }
-                            } else {
-                                currentIndex++
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        if (currentIndex > 0) {
+                            QGOutlinedButton(
+                                text = "‹ Previous",
+                                onClick = { currentIndex-- },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+                        QGPrimaryButton(
+                            text = when {
+                                isLoading -> "Submitting..."
+                                isLastQuestion -> "✓ Submit Quiz"
+                                else -> "Next →"
+                            },
+                            // Free navigation: Next/Previous never require the
+                            // current question to be answered. Only the final
+                            // Submit requires every question to be answered.
+                            enabled = if (isLastQuestion) allAnswered else true,
+                            loading = isLoading && isLastQuestion,
+                            onClick = {
+                                if (isLastQuestion) {
+                                    submitNow()
+                                } else {
+                                    currentIndex++
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (isLastQuestion && !allAnswered) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Answer every question to submit.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "${currentIndex + 1} / ${questions.size}",
@@ -143,6 +191,31 @@ fun QuizScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TimerPill(secondsRemaining: Int) {
+    val isLowTime = secondsRemaining in 0..LOW_TIME_WARNING_SECONDS
+    val minutes = secondsRemaining / 60
+    val seconds = secondsRemaining % 60
+    val timeText = "$minutes:${seconds.toString().padStart(2, '0')}"
+    val bg = if (isLowTime) ErrorRed.copy(alpha = 0.15f) else MaterialTheme.colorScheme.secondaryContainer
+    val fg = if (isLowTime) ErrorRed else MaterialTheme.colorScheme.onSecondaryContainer
+
+    Box(
+        modifier = Modifier
+            .padding(end = 16.dp)
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            "⏱ $timeText",
+            style = MaterialTheme.typography.labelLarge,
+            color = fg,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 

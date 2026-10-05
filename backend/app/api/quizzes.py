@@ -44,7 +44,9 @@ def generate_quiz(request: QuizGenerateRequest, db: Session = Depends(get_db)):
     relevant_chunks = select_relevant_chunks(chunks)
 
     try:
-        ai_questions = generate_quiz_questions(relevant_chunks, request.num_questions)
+        ai_questions = generate_quiz_questions(
+            relevant_chunks, request.num_questions, request.difficulty
+        )
     except AIServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -58,6 +60,7 @@ def generate_quiz(request: QuizGenerateRequest, db: Session = Depends(get_db)):
         quiz_set_id=quiz_set.id,
         quiz_number=existing_quiz_count + 1,
         num_questions=len(ai_questions),
+        time_limit_seconds=request.time_limit_minutes * 60,
     )
     db.add(quiz)
     db.commit()

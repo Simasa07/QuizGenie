@@ -40,6 +40,14 @@ class AppViewModel : ViewModel() {
     private val _history = MutableStateFlow<List<AttemptHistoryItem>>(emptyList())
     val history: StateFlow<List<AttemptHistoryItem>> = _history.asStateFlow()
 
+    // Document-scoped insights: Insights only exists per-document (via the
+    // Document Hub), there is no global Insights tab.
+    private val _documentTopicStats = MutableStateFlow<List<TopicStat>>(emptyList())
+    val documentTopicStats: StateFlow<List<TopicStat>> = _documentTopicStats.asStateFlow()
+
+    private val _documentOverviewStats = MutableStateFlow<OverviewStats?>(null)
+    val documentOverviewStats: StateFlow<OverviewStats?> = _documentOverviewStats.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -99,10 +107,16 @@ class AppViewModel : ViewModel() {
         }
     }
 
-    fun generateQuiz(documentId: Int, numQuestions: Int, onDone: (QuizResponse?) -> Unit) {
+    fun generateQuiz(
+        documentId: Int,
+        numQuestions: Int,
+        difficulty: String = "mixed",
+        timeLimitMinutes: Int = 10,
+        onDone: (QuizResponse?) -> Unit
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
-            repository.generateQuiz(documentId, numQuestions)
+            repository.generateQuiz(documentId, numQuestions, difficulty, timeLimitMinutes)
                 .onSuccess {
                     _currentQuiz.value = it
                     _selectedAnswers.value = emptyMap()
@@ -161,12 +175,47 @@ class AppViewModel : ViewModel() {
         }
     }
 
+    /** Loads a past, already-completed attempt so it can be shown on the Result/Review screen. */
+    fun loadAttemptResult(attemptId: Int, onDone: (AttemptResultResponse?) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _attemptResult.value = null // avoid flashing a stale previous result
+            repository.getAttempt(attemptId)
+                .onSuccess {
+                    _attemptResult.value = it
+                    onDone(it)
+                }
+                .onFailure {
+                    _errorMessage.value = it.message
+                    onDone(null)
+                }
+            _isLoading.value = false
+        }
+    }
+
     fun refreshHistory() {
         val uid = _userId.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
             repository.getAttemptHistory(uid)
                 .onSuccess { _history.value = it }
+                .onFailure { _errorMessage.value = it.message }
+            _isLoading.value = false
+        }
+    }
+
+    /** Loads topic breakdown + overview scoped to one document, for the per-PDF Insights screen. */
+    fun refreshDocumentInsights(documentId: Int) {
+        val uid = _userId.value ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            _documentTopicStats.value = emptyList()
+            _documentOverviewStats.value = null
+            repository.getTopicStats(uid, documentId)
+                .onSuccess { _documentTopicStats.value = it }
+                .onFailure { _errorMessage.value = it.message }
+            repository.getOverview(uid, documentId)
+                .onSuccess { _documentOverviewStats.value = it }
                 .onFailure { _errorMessage.value = it.message }
             _isLoading.value = false
         }

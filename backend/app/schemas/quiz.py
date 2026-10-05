@@ -30,7 +30,13 @@ class DocumentOut(BaseModel):
 # ---------- Quiz generation request ----------
 class QuizGenerateRequest(BaseModel):
     document_id: int
-    num_questions: int = Field(ge=1, le=20)
+    num_questions: int = Field(ge=1, le=30)
+    # V2: "easy" | "medium" | "hard" | "mixed" (default). The AI service
+    # interprets "mixed" as a spread across all three difficulty levels.
+    difficulty: str = "mixed"
+    # V2: chosen directly by the user, same as num_questions - not derived
+    # from question count. Defaults to 10 minutes if the client omits it.
+    time_limit_minutes: int = Field(default=10, ge=1, le=120)
 
 
 class OptionOut(BaseModel):
@@ -56,6 +62,7 @@ class QuizOut(BaseModel):
     id: int
     quiz_number: int
     num_questions: int
+    time_limit_seconds: int
     questions: List[QuestionOut]
 
     class Config:
@@ -126,3 +133,20 @@ class AttemptHistoryItem(BaseModel):
     class Config:
         from_attributes = True
         populate_by_name = True
+
+
+# ---------- V3: Performance Analytics ----------
+class TopicStat(BaseModel):
+    topic: str
+    total_answered: int
+    correct: int
+    accuracy_percentage: float
+    is_weak: bool
+
+
+class OverviewStats(BaseModel):
+    total_attempts: int
+    total_questions_answered: int
+    total_correct: int
+    overall_accuracy_percentage: float
+    recent_attempts: List[AttemptHistoryItem]

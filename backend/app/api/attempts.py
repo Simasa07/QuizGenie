@@ -1,5 +1,6 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
@@ -129,10 +130,20 @@ def get_attempt(attempt_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/user/{user_id}", response_model=list[AttemptHistoryItem])
-def get_user_history(user_id: int, db: Session = Depends(get_db)):
-    return (
-        db.query(models.Attempt)
-        .filter(models.Attempt.user_id == user_id)
-        .order_by(models.Attempt.started_at.desc())
-        .all()
-    )
+def get_user_history(
+    user_id: int,
+    document_id: Optional[int] = Query(
+        None, description="Limit to attempts on one study material instead of all of them."
+    ),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Attempt).filter(models.Attempt.user_id == user_id)
+
+    if document_id is not None:
+        query = (
+            query.join(models.Quiz, models.Attempt.quiz_id == models.Quiz.id)
+            .join(models.QuizSet, models.Quiz.quiz_set_id == models.QuizSet.id)
+            .filter(models.QuizSet.document_id == document_id)
+        )
+
+    return query.order_by(models.Attempt.started_at.desc()).all()

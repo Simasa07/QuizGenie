@@ -31,6 +31,7 @@ android {
         jvmTarget = "17"
         // Project-wide opt-in for Material3 APIs still marked experimental (TopAppBar etc.)
         freeCompilerArgs += "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
+        freeCompilerArgs += "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi"
     }
 
     buildFeatures {

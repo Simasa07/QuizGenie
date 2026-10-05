@@ -2,6 +2,7 @@
 
 package com.ailivequiz.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +22,8 @@ import com.ailivequiz.app.ui.viewmodel.AppViewModel
 @Composable
 fun HistoryScreen(
     viewModel: AppViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onAttemptClick: (Int) -> Unit
 ) {
     val history by viewModel.history.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -76,7 +78,7 @@ fun HistoryScreen(
             } else {
                 LazyColumn(contentPadding = PaddingValues(20.dp)) {
                     items(history.filter { it.is_completed }) { item ->
-                        HistoryCard(item)
+                        HistoryCard(item, onClick = { onAttemptClick(item.attempt_id) })
                         Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
@@ -86,7 +88,7 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun HistoryCard(item: AttemptHistoryItem) {
+private fun HistoryCard(item: AttemptHistoryItem, onClick: () -> Unit) {
     val total = item.total_questions ?: 0
     val score = item.score ?: 0
     val percentage = if (total > 0) (score * 100 / total) else 0
@@ -100,7 +102,9 @@ private fun HistoryCard(item: AttemptHistoryItem) {
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -129,6 +133,7 @@ private fun HistoryCard(item: AttemptHistoryItem) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Text("›", fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

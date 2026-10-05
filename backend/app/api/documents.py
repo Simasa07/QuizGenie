@@ -24,6 +24,20 @@ def upload_document(user_id: int, file: UploadFile = File(...), db: Session = De
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
 
+    # V2: block re-uploading a file with a name you already have, so the
+    # Library list (and quiz history, which shows the filename) never
+    # shows two ambiguous entries with the same name.
+    existing = (
+        db.query(models.Document)
+        .filter(models.Document.user_id == user_id, models.Document.filename == file.filename)
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"You already uploaded a file named '{file.filename}'. Rename it or delete the existing one first.",
+        )
+
     safe_name = f"{uuid.uuid4().hex}_{file.filename}"
     filepath = os.path.join(UPLOAD_DIR, safe_name)
 
@@ -65,4 +79,3 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 @router.get("/user/{user_id}", response_model=list[DocumentOut])
 def list_user_documents(user_id: int, db: Session = Depends(get_db)):
     return db.query(models.Document).filter(models.Document.user_id == user_id).all()
-

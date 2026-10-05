@@ -51,6 +51,11 @@ class Quiz(Base):
     num_questions = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # V2: the person generating the quiz chooses this (in minutes, via
+    # QuizGenerateRequest.time_limit_minutes) - it's stored here rather
+    # than derived, since it's a real user choice, not a fixed formula.
+    time_limit_seconds = Column(Integer, nullable=False, default=600)
+
     quiz_set = relationship("QuizSet", back_populates="quizzes")
     questions = relationship("Question", back_populates="quiz", cascade="all, delete-orphan")
     attempts = relationship("Attempt", back_populates="quiz")
