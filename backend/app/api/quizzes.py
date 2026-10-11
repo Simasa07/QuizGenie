@@ -6,6 +6,7 @@ from app.database import models
 from app.schemas.quiz import QuizGenerateRequest, QuizOut
 from app.services.pdf_service import chunk_text, select_relevant_chunks
 from app.services.ai_service import generate_quiz_questions, AIServiceError
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/quizzes", tags=["quizzes"])
 
@@ -13,9 +14,17 @@ MAX_QUIZZES_PER_DOCUMENT = 3
 
 
 @router.post("/generate", response_model=QuizOut)
-def generate_quiz(request: QuizGenerateRequest, db: Session = Depends(get_db)):
+def generate_quiz(
+    request: QuizGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     document = db.query(models.Document).filter(models.Document.id == request.document_id).first()
-    if not document:
+
+    # Previously this had no ownership check at all - anyone logged in
+    # could generate (and burn AI quota on) a quiz from any other user's
+    # document_id, just by guessing the id.
+    if not document or document.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Document not found.")
     if document.status != "processed" or not document.extracted_text:
         raise HTTPException(status_code=400, detail="Document text is not ready yet.")
@@ -94,15 +103,27 @@ def generate_quiz(request: QuizGenerateRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/{quiz_id}", response_model=QuizOut)
-def get_quiz(quiz_id: int, db: Session = Depends(get_db)):
+def get_quiz(
+    quiz_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     quiz = db.query(models.Quiz).filter(models.Quiz.id == quiz_id).first()
-    if not quiz:
+    if not quiz or quiz.quiz_set.document.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Quiz not found.")
     return quiz
 
 
 @router.get("/document/{document_id}", response_model=list[QuizOut])
-def list_quizzes_for_document(document_id: int, db: Session = Depends(get_db)):
+def list_quizzes_for_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    document = db.query(models.Document).filter(models.Document.id == document_id).first()
+    if not document or document.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
     quiz_set = (
         db.query(models.QuizSet).filter(models.QuizSet.document_id == document_id).first()
     )

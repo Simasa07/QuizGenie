@@ -4,16 +4,31 @@ from pydantic import BaseModel, Field
 
 
 # ---------- Users ----------
-class UserCreate(BaseModel):
+class UserRegister(BaseModel):
+    username: str
     email: str
+    password: str
 
+class UserLogin(BaseModel):
+    email: str
+    password: str
 
 class UserOut(BaseModel):
     id: int
+    username: Optional[str] = None
     email: str
 
     class Config:
         from_attributes = True
+
+
+class AuthResponse(BaseModel):
+    """Returned by both /users/signup and /users/login."""
+    access_token: str
+    token_type: str = "bearer"
+    id: int
+    username: Optional[str] = None
+    email: str
 
 
 # ---------- Documents ----------
@@ -86,7 +101,8 @@ class AIQuizResponse(BaseModel):
 # ---------- Attempts ----------
 class AttemptStartRequest(BaseModel):
     quiz_id: int
-    user_id: int
+    # user_id removed - identity now comes from the Authorization token,
+    # never from a client-supplied field.
 
 
 class AttemptStartOut(BaseModel):
@@ -150,3 +166,9 @@ class OverviewStats(BaseModel):
     total_correct: int
     overall_accuracy_percentage: float
     recent_attempts: List[AttemptHistoryItem]
+
+
+# ---------- V4: Personalized Learning ----------
+class RecommendationOut(BaseModel):
+    recommendation: str
+    weak_topics: List[str]

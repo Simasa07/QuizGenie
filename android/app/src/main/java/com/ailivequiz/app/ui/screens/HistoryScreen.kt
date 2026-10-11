@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ailivequiz.app.data.model.AttemptHistoryItem
 import com.ailivequiz.app.ui.components.QGBottomBar
+import com.ailivequiz.app.ui.components.QGHeaderActions
 import com.ailivequiz.app.ui.theme.ErrorRed
 import com.ailivequiz.app.ui.theme.SuccessGreen
 import com.ailivequiz.app.ui.viewmodel.AppViewModel
@@ -23,7 +24,8 @@ import com.ailivequiz.app.ui.viewmodel.AppViewModel
 fun HistoryScreen(
     viewModel: AppViewModel,
     onBack: () -> Unit,
-    onAttemptClick: (Int) -> Unit
+    onAttemptClick: (Int) -> Unit,
+    onLogout: () -> Unit
 ) {
     val history by viewModel.history.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -35,6 +37,7 @@ fun HistoryScreen(
         topBar = {
             TopAppBar(
                 title = { Text("History") },
+                actions = { QGHeaderActions(onLogout = onLogout, modifier = Modifier.padding(end = 12.dp)) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },

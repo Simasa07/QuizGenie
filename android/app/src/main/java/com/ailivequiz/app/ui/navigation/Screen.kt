@@ -1,6 +1,7 @@
 package com.ailivequiz.app.ui.navigation
 
 sealed class Screen(val route: String) {
+    data object Login : Screen("login")
     data object Library : Screen("library")
     data object History : Screen("history")
 

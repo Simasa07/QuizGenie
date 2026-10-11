@@ -1,6 +1,7 @@
 package com.ailivequiz.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -9,16 +10,66 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ailivequiz.app.R
 import com.ailivequiz.app.ui.theme.ErrorRed
 import com.ailivequiz.app.ui.theme.SuccessGreen
+
+/** The QuizGenie logo - the same artwork as the launcher icon. */
+@Composable
+fun QGLogo(modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    Image(
+        painter = painterResource(id = R.drawable.ic_quizgenie_logo),
+        contentDescription = "QuizGenie logo",
+        modifier = modifier.size(size)
+    )
+}
+
+/**
+ * Top-right cluster shared by the Library and History screens: a "Log out"
+ * button followed by the logo. Logging out asks for confirmation first so it
+ * can't be triggered by an accidental tap.
+ */
+@Composable
+fun QGHeaderActions(onLogout: () -> Unit, modifier: Modifier = Modifier) {
+    var confirming by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        TextButton(onClick = { confirming = true }) {
+            Text("Log out", color = MaterialTheme.colorScheme.primary)
+        }
+        QGLogo(size = 36.dp)
+    }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Log out?") },
+            text = { Text("You'll need to sign in again to see your materials and history.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirming = false
+                    onLogout()
+                }) { Text("Log out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
 
 /** Primary call-to-action button: solid emerald background. */
 @Composable
@@ -129,6 +180,13 @@ fun QGBottomBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // App targets Android 15 (SDK 35), which forces edge-to-edge
+                // display: the system gesture/button nav bar draws on top of
+                // the app rather than reserving its own space. A built-in
+                // Material3 NavigationBar handles this automatically; this
+                // custom Surface does not, so it must be padded explicitly
+                // or the phone's nav bar visually covers these tab labels.
+                .navigationBarsPadding()
                 .padding(vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {

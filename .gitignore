@@ -23,3 +23,8 @@ Thumbs.db
 
 # Kotlin/Gradle generated files
 android/.kotlin/
+
+android/.kotlin/
+backend/.coverage
+backend/.pytest_cache/
+backend/test_reports/htmlcov/

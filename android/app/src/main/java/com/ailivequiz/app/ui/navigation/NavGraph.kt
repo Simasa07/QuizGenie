@@ -26,7 +26,28 @@ fun AppNavGraph(viewModel: AppViewModel) {
         }
     }
 
-    NavHost(navController = navController, startDestination = Screen.Library.route) {
+    // Log out: wipe the session data, then clear the ENTIRE back stack and land
+    // on Login - so pressing the phone's Back button afterwards can never
+    // return to a screen that belonged to the previous user.
+    fun logout() {
+        viewModel.logout()
+        navController.navigate(Screen.Login.route) {
+            popUpTo(navController.graph.id) { inclusive = true }
+        }
+    }
+
+    NavHost(navController = navController, startDestination = Screen.Login.route) {
+        
+        composable(Screen.Login.route) {
+            LoginScreen(
+                viewModel = viewModel,
+                onLoginSuccess = {
+                    navController.navigate(Screen.Library.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            )
+        }
 
         composable(Screen.Library.route) {
             LibraryScreen(
@@ -34,7 +55,8 @@ fun AppNavGraph(viewModel: AppViewModel) {
                 onDocumentSelected = { documentId ->
                     navController.navigate(Screen.DocumentHub.createRoute(documentId))
                 },
-                onHistoryClick = { navigateToTab(Screen.History.route) }
+                onHistoryClick = { navigateToTab(Screen.History.route) },
+                onLogout = { logout() }
             )
         }
 
@@ -115,7 +137,8 @@ fun AppNavGraph(viewModel: AppViewModel) {
                 onBack = { navigateToTab(Screen.Library.route) },
                 onAttemptClick = { attemptId ->
                     navController.navigate(Screen.ReviewResult.createRoute(attemptId))
-                }
+                },
+                onLogout = { logout() }
             )
         }
 

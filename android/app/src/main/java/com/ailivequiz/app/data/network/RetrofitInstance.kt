@@ -1,5 +1,6 @@
 package com.ailivequiz.app.data.network
 
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -21,11 +22,33 @@ object RetrofitInstance {
      */
     private const val BASE_URL = "http://127.0.0.1:8000/"
 
+    /**
+     * Adds "Authorization: Bearer <token>" to every request once the user
+     * is logged in. Signup/login themselves go out without it (no token yet).
+     */
+    private val authInterceptor = Interceptor { chain ->
+        val token = TokenStore.token
+        val request = if (token != null) {
+            chain.request().newBuilder()
+                .header("Authorization", "Bearer $token")
+                .build()
+        } else {
+            chain.request()
+        }
+        chain.proceed(request)
+    }
+
+    // BASIC logs method, URL and status code only. It used to be BODY, which
+    // would print every password typed at login (and the token) into Logcat.
+    // Switch back to BODY temporarily if you need to debug a response, but
+    // never ship it that way.
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = HttpLoggingInterceptor.Level.BASIC
+        redactHeader("Authorization")
     }
 
     private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
         // AI quiz generation can take a while (LLM call + validation),
         // so give it a generous timeout rather than failing fast.

@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .env
 uploads/*.pdf
+# test artifacts
+.coverage
+.pytest_cache/

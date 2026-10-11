@@ -22,11 +22,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ailivequiz.app.data.model.DocumentResponse
 import com.ailivequiz.app.ui.components.GlyphBadge
 import com.ailivequiz.app.ui.components.QGBottomBar
+import com.ailivequiz.app.ui.components.QGHeaderActions
 import com.ailivequiz.app.ui.components.StatusChip
 import com.ailivequiz.app.ui.viewmodel.AppViewModel
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -39,9 +41,11 @@ import java.io.FileOutputStream
 fun LibraryScreen(
     viewModel: AppViewModel,
     onDocumentSelected: (Int) -> Unit,
-    onHistoryClick: () -> Unit
+    onHistoryClick: () -> Unit,
+    onLogout: () -> Unit
 ) {
     val context = LocalContext.current
+    val username by viewModel.username.collectAsState()
     val documents by viewModel.documents.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -76,16 +80,26 @@ fun LibraryScreen(
             contentPadding = PaddingValues(20.dp)
         ) {
             item {
-                Text(
-                    "Good morning 👋",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    "Ready to challenge yourself?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Welcome, ${username ?: "there"} 👋",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            "Ready to challenge yourself?",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    QGHeaderActions(onLogout = onLogout)
+                }
                 Spacer(modifier = Modifier.height(20.dp))
 
                 UploadHeroCard(

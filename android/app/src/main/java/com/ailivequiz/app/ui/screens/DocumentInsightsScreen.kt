@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ailivequiz.app.data.model.AttemptHistoryItem
 import com.ailivequiz.app.data.model.OverviewStats
 import com.ailivequiz.app.data.model.TopicStat
 import com.ailivequiz.app.ui.theme.ErrorRed
@@ -70,6 +71,9 @@ fun DocumentInsightsScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         OverviewCardsRow(currentOverview)
+                        ScoreTrendIndicator(currentOverview.recent_attempts)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        RecommendationCard(viewModel = viewModel, documentId = documentId)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             "Topic Breakdown",
@@ -117,6 +121,117 @@ private fun OverviewCardsRow(overview: OverviewStats) {
             value = "${overview.overall_accuracy_percentage.toInt()}%",
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+/**
+ * V4: compares the two most recent attempts on this document and shows
+ * "up X% / down X% from previous attempt" - the "improvement rate" idea
+ * from the proposal, using data we already have (no new instrumentation).
+ */
+@Composable
+private fun ScoreTrendIndicator(recentAttempts: List<AttemptHistoryItem>) {
+    if (recentAttempts.size < 2) return
+    val latestPct = percentOf(recentAttempts[0]) ?: return
+    val previousPct = percentOf(recentAttempts[1]) ?: return
+    val diff = latestPct - previousPct
+    if (diff == 0) return
+
+    val isUp = diff > 0
+    val color = if (isUp) SuccessGreen else ErrorRed
+    val arrow = if (isUp) "↑" else "↓"
+
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(
+        "$arrow ${kotlin.math.abs(diff)}% from your previous attempt",
+        style = MaterialTheme.typography.labelMedium,
+        color = color,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+private fun percentOf(item: AttemptHistoryItem): Int? {
+    val total = item.total_questions ?: return null
+    val score = item.score ?: return null
+    if (total <= 0) return null
+    return (score * 100) / total
+}
+
+/**
+ * V4: AI-generated personalized study recommendation. Fetched only when the
+ * person taps the button - not auto-loaded - since every tap is a real AI
+ * API call.
+ */
+@Composable
+private fun RecommendationCard(viewModel: AppViewModel, documentId: Int) {
+    val recommendation by viewModel.recommendation.collectAsState()
+    val isLoadingRec by viewModel.isLoadingRecommendation.collectAsState()
+    val currentRecommendation = recommendation
+
+    Card(
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("✦", fontSize = 18.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "AI Study Tips",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (currentRecommendation != null) {
+                Text(
+                    currentRecommendation.recommendation,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                TextButton(
+                    onClick = { viewModel.loadRecommendation(documentId) },
+                    enabled = !isLoadingRec
+                ) {
+                    Text(
+                        if (isLoadingRec) "Thinking..." else "Refresh tip",
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                Text(
+                    "Get a short, personalized study tip based on your weak topics.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = { viewModel.loadRecommendation(documentId) },
+                    enabled = !isLoadingRec,
+                    shape = MaterialTheme.shapes.medium,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    if (isLoadingRec) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Thinking...")
+                    } else {
+                        Text("Get Study Tips")
+                    }
+                }
+            }
+        }
     }
 }
 

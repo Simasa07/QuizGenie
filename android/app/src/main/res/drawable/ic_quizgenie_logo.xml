@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- QuizGenie logo used inside the app (login, library, history). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp"
+    android:height="72dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <path android:pathData="M16,0 H56 A16,16 0 0 1 72,16 V56 A16,16 0 0 1 56,72 H16 A16,16 0 0 1 0,56 V16 A16,16 0 0 1 16,0 Z"
+          android:fillColor="#064E3B"/>
+    <group android:translateX="-18" android:translateY="-18">
+        <path android:pathData="M30,50 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z"
+              android:strokeColor="#F8E7C9"
+              android:strokeWidth="7"/>
+        <path android:pathData="M50.5,68 a17.5,17.5 0 1,0 35.0,0 a17.5,17.5 0 1,0 -35.0,0 Z"
+              android:fillColor="#064E3B"/>
+        <path android:pathData="M68,54.5 Q70.7,65.3 81.5,68 Q70.7,70.7 68,81.5 Q65.3,70.7 54.5,68 Q65.3,65.3 68,54.5 Z"
+              android:fillColor="#F8E7C9"/>
+        <path android:pathData="M77,23 Q78.4,28.6 84,30 Q78.4,31.4 77,37 Q75.6,31.4 70,30 Q75.6,28.6 77,23 Z"
+              android:fillColor="#F8E7C9"/>
+    </group>
+</vector>

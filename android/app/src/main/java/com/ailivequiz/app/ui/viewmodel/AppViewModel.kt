@@ -3,20 +3,14 @@ package com.ailivequiz.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ailivequiz.app.data.model.*
+import com.ailivequiz.app.data.network.TokenStore
 import com.ailivequiz.app.data.repository.QuizRepository
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.MultipartBody
-
-/**
- * V1 has no login screen yet, so on first launch we silently create/reuse
- * a single demo user via POST /users/. Swap DEMO_EMAIL for a real
- * login flow in V2 without touching any other screen - they all just
- * read `userId` from here.
- */
-private const val DEMO_EMAIL = "student@ailivequiz.local"
 
 class AppViewModel : ViewModel() {
 
@@ -24,6 +18,10 @@ class AppViewModel : ViewModel() {
 
     private val _userId = MutableStateFlow<Int?>(null)
     val userId: StateFlow<Int?> = _userId.asStateFlow()
+
+    // The name shown in the Library greeting: the username chosen at signup.
+    private val _username = MutableStateFlow<String?>(null)
+    val username: StateFlow<String?> = _username.asStateFlow()
 
     private val _documents = MutableStateFlow<List<DocumentResponse>>(emptyList())
     val documents: StateFlow<List<DocumentResponse>> = _documents.asStateFlow()
@@ -48,6 +46,15 @@ class AppViewModel : ViewModel() {
     private val _documentOverviewStats = MutableStateFlow<OverviewStats?>(null)
     val documentOverviewStats: StateFlow<OverviewStats?> = _documentOverviewStats.asStateFlow()
 
+    private val _recommendation = MutableStateFlow<RecommendationOut?>(null)
+    val recommendation: StateFlow<RecommendationOut?> = _recommendation.asStateFlow()
+
+    // Separate from the main isLoading flag: fetching a recommendation is a
+    // deliberate button tap (it costs an AI call), not something that should
+    // trigger the whole screen's loading spinner.
+    private val _isLoadingRecommendation = MutableStateFlow(false)
+    val isLoadingRecommendation: StateFlow<Boolean> = _isLoadingRecommendation.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -59,31 +66,81 @@ class AppViewModel : ViewModel() {
     val selectedAnswers: StateFlow<Map<Int, Int>> = _selectedAnswers.asStateFlow()
 
     init {
-        ensureDemoUser()
+        // Will be populated when user logs in via LoginScreen
     }
 
-    fun clearError() {
-        _errorMessage.value = null
-    }
+    /** Username from signup, or the first part of the email if none was ever set. */
+    private fun displayNameFor(user: UserResponse): String =
+        user.username?.takeIf { it.isNotBlank() } ?: user.email.substringBefore("@")
 
-    private fun ensureDemoUser() {
+    fun loginUser(email: String, password: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
-            repository.createOrGetUser(DEMO_EMAIL)
+            _errorMessage.value = null
+            repository.loginUser(email, password)
                 .onSuccess {
                     _userId.value = it.id
+                    _username.value = displayNameFor(it)
                     refreshDocuments()
+                    onResult(true)
                 }
-                .onFailure { _errorMessage.value = "Could not reach backend: ${it.message}" }
+                .onFailure {
+                    _errorMessage.value = "Login failed: ${it.message}"
+                    onResult(false)
+                }
             _isLoading.value = false
         }
     }
 
-    fun refreshDocuments() {
-        val uid = _userId.value ?: return
+    fun registerUser(username: String, email: String, password: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
-            repository.listDocuments(uid)
+            _errorMessage.value = null
+            repository.registerUser(username, email, password)
+                .onSuccess {
+                    _userId.value = it.id
+                    _username.value = displayNameFor(it)
+                    refreshDocuments()
+                    onResult(true)
+                }
+                .onFailure {
+                    _errorMessage.value = "Registration failed: ${it.message}"
+                    onResult(false)
+                }
+            _isLoading.value = false
+        }
+    }
+
+    /**
+     * Ends the session. Forgets the login token, cancels any request still in
+     * flight (so a late response can't refill the screen after logout), and
+     * wipes everything the previous user had loaded - so whoever logs in next
+     * on this phone never sees it.
+     */
+    fun logout() {
+        TokenStore.clear()
+        viewModelScope.coroutineContext.cancelChildren()
+
+        _userId.value = null
+        _username.value = null
+        _documents.value = emptyList()
+        _currentQuiz.value = null
+        _currentAttemptId.value = null
+        _attemptResult.value = null
+        _history.value = emptyList()
+        _documentTopicStats.value = emptyList()
+        _documentOverviewStats.value = null
+        _recommendation.value = null
+        _selectedAnswers.value = emptyMap()
+        _isLoadingRecommendation.value = false
+        _isLoading.value = false
+        _errorMessage.value = null
+    }
+
+    fun refreshDocuments() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repository.listDocuments()
                 .onSuccess { _documents.value = it }
                 .onFailure { _errorMessage.value = it.message }
             _isLoading.value = false
@@ -91,10 +148,9 @@ class AppViewModel : ViewModel() {
     }
 
     fun uploadDocument(filePart: MultipartBody.Part, onDone: (DocumentResponse?) -> Unit) {
-        val uid = _userId.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
-            repository.uploadDocument(uid, filePart)
+            repository.uploadDocument(filePart)
                 .onSuccess {
                     refreshDocuments()
                     onDone(it)
@@ -131,10 +187,9 @@ class AppViewModel : ViewModel() {
     }
 
     fun startAttempt(quizId: Int, onDone: (Int?) -> Unit) {
-        val uid = _userId.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
-            repository.startAttempt(quizId, uid)
+            repository.startAttempt(quizId)
                 .onSuccess {
                     _currentQuiz.value = it.quiz
                     _currentAttemptId.value = it.attempt_id
@@ -194,10 +249,9 @@ class AppViewModel : ViewModel() {
     }
 
     fun refreshHistory() {
-        val uid = _userId.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
-            repository.getAttemptHistory(uid)
+            repository.getAttemptHistory()
                 .onSuccess { _history.value = it }
                 .onFailure { _errorMessage.value = it.message }
             _isLoading.value = false
@@ -206,18 +260,29 @@ class AppViewModel : ViewModel() {
 
     /** Loads topic breakdown + overview scoped to one document, for the per-PDF Insights screen. */
     fun refreshDocumentInsights(documentId: Int) {
-        val uid = _userId.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
             _documentTopicStats.value = emptyList()
             _documentOverviewStats.value = null
-            repository.getTopicStats(uid, documentId)
+            _recommendation.value = null // avoid showing a stale tip from a different document
+            repository.getTopicStats(documentId)
                 .onSuccess { _documentTopicStats.value = it }
                 .onFailure { _errorMessage.value = it.message }
-            repository.getOverview(uid, documentId)
+            repository.getOverview(documentId)
                 .onSuccess { _documentOverviewStats.value = it }
                 .onFailure { _errorMessage.value = it.message }
             _isLoading.value = false
+        }
+    }
+
+    /** Fetches an AI-written study recommendation. Call only on an explicit user tap (costs an AI call). */
+    fun loadRecommendation(documentId: Int) {
+        viewModelScope.launch {
+            _isLoadingRecommendation.value = true
+            repository.getRecommendation(documentId)
+                .onSuccess { _recommendation.value = it }
+                .onFailure { _errorMessage.value = it.message }
+            _isLoadingRecommendation.value = false
         }
     }
 }

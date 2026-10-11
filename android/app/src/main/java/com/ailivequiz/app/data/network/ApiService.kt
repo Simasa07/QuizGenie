@@ -7,21 +7,23 @@ import retrofit2.http.*
 interface ApiService {
 
     // ---------- Users ----------
-    @POST("users/")
-    suspend fun createOrGetUser(@Body request: UserCreateRequest): UserResponse
+    @POST("users/signup")
+    suspend fun registerUser(@Body request: UserRegisterRequest): UserResponse
+
+    @POST("users/login")
+    suspend fun loginUser(@Body request: UserLoginRequest): UserResponse
 
     // ---------- Documents ----------
-    // user_id is a query param here because that's how FastAPI treats a plain
-    // int parameter alongside a File(...) param (see documents.py).
+    // The backend knows who is uploading from the login token (added to every
+    // request by RetrofitInstance), so there is no user_id parameter any more.
     @Multipart
     @POST("documents/upload")
     suspend fun uploadDocument(
-        @Query("user_id") userId: Int,
         @Part file: MultipartBody.Part
     ): DocumentResponse
 
-    @GET("documents/user/{userId}")
-    suspend fun listDocuments(@Path("userId") userId: Int): List<DocumentResponse>
+    @GET("documents/mine")
+    suspend fun listDocuments(): List<DocumentResponse>
 
     @GET("documents/{documentId}")
     suspend fun getDocument(@Path("documentId") documentId: Int): DocumentResponse
@@ -49,22 +51,24 @@ interface ApiService {
     @GET("attempts/{attemptId}")
     suspend fun getAttempt(@Path("attemptId") attemptId: Int): AttemptResultResponse
 
-    @GET("attempts/user/{userId}")
+    @GET("attempts/mine")
     suspend fun getAttemptHistory(
-        @Path("userId") userId: Int,
         @Query("document_id") documentId: Int? = null
     ): List<AttemptHistoryItem>
 
     // ---------- Analytics (V3) ----------
-    @GET("analytics/user/{userId}/topics")
+    @GET("analytics/mine/topics")
     suspend fun getTopicStats(
-        @Path("userId") userId: Int,
         @Query("document_id") documentId: Int? = null
     ): List<TopicStat>
 
-    @GET("analytics/user/{userId}/overview")
+    @GET("analytics/mine/overview")
     suspend fun getOverview(
-        @Path("userId") userId: Int,
         @Query("document_id") documentId: Int? = null
     ): OverviewStats
+
+    @GET("analytics/mine/recommendation")
+    suspend fun getRecommendation(
+        @Query("document_id") documentId: Int? = null
+    ): RecommendationOut
 }

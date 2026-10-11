@@ -8,6 +8,7 @@ from app.database.database import get_db
 from app.database import models
 from app.schemas.quiz import DocumentOut
 from app.services.pdf_service import extract_text_from_pdf, clean_text
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -16,20 +17,17 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/upload", response_model=DocumentOut)
-def upload_document(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are supported in V1.")
 
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-
-    # V2: block re-uploading a file with a name you already have, so the
-    # Library list (and quiz history, which shows the filename) never
-    # shows two ambiguous entries with the same name.
     existing = (
         db.query(models.Document)
-        .filter(models.Document.user_id == user_id, models.Document.filename == file.filename)
+        .filter(models.Document.user_id == current_user.id, models.Document.filename == file.filename)
         .first()
     )
     if existing:
@@ -45,7 +43,7 @@ def upload_document(user_id: int, file: UploadFile = File(...), db: Session = De
         shutil.copyfileobj(file.file, buffer)
 
     document = models.Document(
-        user_id=user_id,
+        user_id=current_user.id,
         filename=file.filename,
         filepath=filepath,
         status="uploaded",
@@ -54,7 +52,6 @@ def upload_document(user_id: int, file: UploadFile = File(...), db: Session = De
     db.commit()
     db.refresh(document)
 
-    # Extract text right away so quiz generation can use it later.
     try:
         raw_text = extract_text_from_pdf(filepath)
         document.extracted_text = clean_text(raw_text)
@@ -68,14 +65,27 @@ def upload_document(user_id: int, file: UploadFile = File(...), db: Session = De
     return document
 
 
+@router.get("/mine", response_model=list[DocumentOut])
+def list_my_documents(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return db.query(models.Document).filter(models.Document.user_id == current_user.id).all()
+
+
 @router.get("/{document_id}", response_model=DocumentOut)
-def get_document(document_id: int, db: Session = Depends(get_db)):
+def get_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     document = db.query(models.Document).filter(models.Document.id == document_id).first()
-    if not document:
+
+    # Same 404 whether the document doesn't exist at all, or it exists but
+    # belongs to someone else - this previously had NO ownership check at
+    # all, so any logged-in user could read any other user's document by
+    # guessing/incrementing the id.
+    if not document or document.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Document not found.")
+
     return document
-
-
-@router.get("/user/{user_id}", response_model=list[DocumentOut])
-def list_user_documents(user_id: int, db: Session = Depends(get_db)):
-    return db.query(models.Document).filter(models.Document.user_id == user_id).all()

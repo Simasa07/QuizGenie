@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,14 +16,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ailivequiz.app.ui.components.GlyphBadge
 import com.ailivequiz.app.ui.components.QGPrimaryButton
 import com.ailivequiz.app.ui.viewmodel.AppViewModel
 
-private val PRESET_COUNTS = listOf(5, 10, 15, 20, 25, 30)
-private val PRESET_MINUTES = listOf(5, 10, 15, 20, 30, 45)
+// The allowed ranges. These mirror the limits the backend enforces
+// (QuizGenerateRequest: 1-30 questions, 1-120 minutes).
+private const val MIN_QUESTIONS = 1
+private const val MAX_QUESTIONS = 30
+private const val MIN_MINUTES = 1
+private const val MAX_MINUTES = 120
 
 private data class DifficultyOption(val value: String, val label: String)
 private val DIFFICULTY_OPTIONS = listOf(
@@ -39,9 +45,15 @@ fun QuizConfigScreen(
     onQuizReady: (Int) -> Unit,
     onBack: () -> Unit
 ) {
-    var numQuestions by remember { mutableIntStateOf(10) }
-    var timeLimitMinutes by remember { mutableIntStateOf(10) }
+    // The person types these in; we only show the allowed range.
+    var questionsText by remember { mutableStateOf("") }
+    var minutesText by remember { mutableStateOf("") }
     var difficulty by remember { mutableStateOf("mixed") }
+
+    val numQuestions = questionsText.toIntOrNull()
+    val timeLimitMinutes = minutesText.toIntOrNull()
+    val questionsValid = numQuestions != null && numQuestions in MIN_QUESTIONS..MAX_QUESTIONS
+    val minutesValid = timeLimitMinutes != null && timeLimitMinutes in MIN_MINUTES..MAX_MINUTES
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val documents by viewModel.documents.collectAsState()
@@ -67,6 +79,7 @@ fun QuizConfigScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -85,44 +98,29 @@ fun QuizConfigScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // --- Question count ---
-            SectionLabel(title = "How many questions?", subtitle = "Choose between 1-30")
-            Spacer(modifier = Modifier.height(14.dp))
-            FlowRowChips {
-                PRESET_COUNTS.forEach { count ->
-                    SelectableChip(
-                        label = count.toString(),
-                        selected = numQuestions == count,
-                        onClick = { numQuestions = count }
-                    )
-                }
-            }
+            SectionLabel(title = "How many questions?")
             Spacer(modifier = Modifier.height(10.dp))
-            CustomStepper(
-                label = "Custom:",
-                value = numQuestions,
-                onValueChange = { numQuestions = it.coerceIn(1, 30) }
+            NumberField(
+                value = questionsText,
+                onValueChange = { questionsText = it },
+                label = "Number of questions",
+                placeholder = "e.g. 10",
+                constraintText = "Between $MIN_QUESTIONS and $MAX_QUESTIONS questions",
+                isError = questionsText.isNotEmpty() && !questionsValid
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             // --- Time limit: a separate, independent choice from question count ---
-            SectionLabel(title = "How much time?", subtitle = "Choose between 1-120 minutes")
-            Spacer(modifier = Modifier.height(14.dp))
-            FlowRowChips {
-                PRESET_MINUTES.forEach { minutes ->
-                    SelectableChip(
-                        label = "${minutes}m",
-                        selected = timeLimitMinutes == minutes,
-                        onClick = { timeLimitMinutes = minutes }
-                    )
-                }
-            }
+            SectionLabel(title = "How much time?")
             Spacer(modifier = Modifier.height(10.dp))
-            CustomStepper(
-                label = "Custom:",
-                value = timeLimitMinutes,
-                suffix = " min",
-                onValueChange = { timeLimitMinutes = it.coerceIn(1, 120) }
+            NumberField(
+                value = minutesText,
+                onValueChange = { minutesText = it },
+                label = "Time limit (minutes)",
+                placeholder = "e.g. 15",
+                constraintText = "Between $MIN_MINUTES and $MAX_MINUTES minutes",
+                isError = minutesText.isNotEmpty() && !minutesValid
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -175,9 +173,14 @@ fun QuizConfigScreen(
             QGPrimaryButton(
                 text = if (isLoading) "Generating..." else "✦  Generate Quiz",
                 loading = isLoading,
+                enabled = questionsValid && minutesValid,
                 onClick = {
-                    viewModel.generateQuiz(documentId, numQuestions, difficulty, timeLimitMinutes) { quiz ->
-                        if (quiz != null) onQuizReady(quiz.id)
+                    val questions = numQuestions
+                    val minutes = timeLimitMinutes
+                    if (questions != null && minutes != null) {
+                        viewModel.generateQuiz(documentId, questions, difficulty, minutes) { quiz ->
+                            if (quiz != null) onQuizReady(quiz.id)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -254,40 +257,31 @@ private fun SelectableChip(
     }
 }
 
+/**
+ * A numbers-only input that shows its allowed range underneath. The helper
+ * line turns red when the typed value is outside that range.
+ */
 @Composable
-private fun CustomStepper(
+private fun NumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
     label: String,
-    value: Int,
-    onValueChange: (Int) -> Unit,
-    suffix: String = ""
+    placeholder: String,
+    constraintText: String,
+    isError: Boolean
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        StepButton(symbol = "-", onClick = { onValueChange(value - 1) })
-        Text(
-            text = "$value$suffix",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        StepButton(symbol = "+", onClick = { onValueChange(value + 1) })
-    }
-}
-
-@Composable
-private fun StepButton(symbol: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(32.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(symbol, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-    }
+    OutlinedTextField(
+        value = value,
+        onValueChange = { newValue ->
+            // Digits only, and at most 3 characters (the largest allowed value is 120).
+            if (newValue.length <= 3 && newValue.all { it.isDigit() }) onValueChange(newValue)
+        },
+        label = { Text(label) },
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        isError = isError,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        supportingText = { Text(constraintText) },
+        modifier = Modifier.fillMaxWidth()
+    )
 }

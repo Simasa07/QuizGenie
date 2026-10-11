@@ -13,23 +13,28 @@ from app.schemas.quiz import (
     AnswerReview,
     AttemptHistoryItem,
 )
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/attempts", tags=["attempts"])
 
 
 @router.post("/start", response_model=AttemptStartOut)
-def start_attempt(request: AttemptStartRequest, db: Session = Depends(get_db)):
+def start_attempt(
+    request: AttemptStartRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     quiz = db.query(models.Quiz).filter(models.Quiz.id == request.quiz_id).first()
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found.")
 
-    user = db.query(models.User).filter(models.User.id == request.user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
+    # Previously trusted a client-supplied user_id with no ownership check
+    # on the quiz at all - anyone could start (and submit) an attempt on
+    # someone else's quiz just by guessing its id.
+    if not quiz or quiz.quiz_set.document.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Quiz not found.")
 
     attempt = models.Attempt(
         quiz_id=quiz.id,
-        user_id=user.id,
+        user_id=current_user.id,
         total_questions=len(quiz.questions),
     )
     db.add(attempt)
@@ -40,9 +45,14 @@ def start_attempt(request: AttemptStartRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/{attempt_id}/submit", response_model=AttemptResultOut)
-def submit_attempt(attempt_id: int, request: AttemptSubmitRequest, db: Session = Depends(get_db)):
+def submit_attempt(
+    attempt_id: int,
+    request: AttemptSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     attempt = db.query(models.Attempt).filter(models.Attempt.id == attempt_id).first()
-    if not attempt:
+    if not attempt or attempt.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Attempt not found.")
     if attempt.is_completed:
         raise HTTPException(status_code=400, detail="Attempt already submitted.")
@@ -97,10 +107,34 @@ def submit_attempt(attempt_id: int, request: AttemptSubmitRequest, db: Session =
     )
 
 
+@router.get("/mine", response_model=list[AttemptHistoryItem])
+def get_my_history(
+    document_id: Optional[int] = Query(
+        None, description="Limit to attempts on one study material instead of all of them."
+    ),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    query = db.query(models.Attempt).filter(models.Attempt.user_id == current_user.id)
+
+    if document_id is not None:
+        query = (
+            query.join(models.Quiz, models.Attempt.quiz_id == models.Quiz.id)
+            .join(models.QuizSet, models.Quiz.quiz_set_id == models.QuizSet.id)
+            .filter(models.QuizSet.document_id == document_id)
+        )
+
+    return query.order_by(models.Attempt.started_at.desc()).all()
+
+
 @router.get("/{attempt_id}", response_model=AttemptResultOut)
-def get_attempt(attempt_id: int, db: Session = Depends(get_db)):
+def get_attempt(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     attempt = db.query(models.Attempt).filter(models.Attempt.id == attempt_id).first()
-    if not attempt:
+    if not attempt or attempt.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Attempt not found.")
     if not attempt.is_completed:
         raise HTTPException(status_code=400, detail="Attempt not yet submitted.")
@@ -127,23 +161,3 @@ def get_attempt(attempt_id: int, db: Session = Depends(get_db)):
         percentage=percentage,
         answers=review,
     )
-
-
-@router.get("/user/{user_id}", response_model=list[AttemptHistoryItem])
-def get_user_history(
-    user_id: int,
-    document_id: Optional[int] = Query(
-        None, description="Limit to attempts on one study material instead of all of them."
-    ),
-    db: Session = Depends(get_db),
-):
-    query = db.query(models.Attempt).filter(models.Attempt.user_id == user_id)
-
-    if document_id is not None:
-        query = (
-            query.join(models.Quiz, models.Attempt.quiz_id == models.Quiz.id)
-            .join(models.QuizSet, models.Quiz.quiz_set_id == models.QuizSet.id)
-            .filter(models.QuizSet.document_id == document_id)
-        )
-
-    return query.order_by(models.Attempt.started_at.desc()).all()

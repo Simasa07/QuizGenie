@@ -1,13 +1,26 @@
 package com.ailivequiz.app.data.model
 
 // ---------- Users ----------
-data class UserCreateRequest(
-    val email: String
+
+data class UserRegisterRequest(
+    val username: String,
+    val email: String,
+    val password: String
 )
 
+data class UserLoginRequest(
+    val email: String,
+    val password: String
+)
+
+// Returned by both signup and login. access_token is the signed session token
+// the app must send back (as "Authorization: Bearer <token>") on every other request.
 data class UserResponse(
     val id: Int,
-    val email: String
+    val username: String? = null,
+    val email: String,
+    val access_token: String,
+    val token_type: String? = null
 )
 
 // ---------- Documents ----------
@@ -48,9 +61,10 @@ data class QuizResponse(
 )
 
 // ---------- Attempts ----------
+// No user_id here any more: the backend now identifies the user from the
+// login token, never from a field the client could change.
 data class AttemptStartRequest(
-    val quiz_id: Int,
-    val user_id: Int
+    val quiz_id: Int
 )
 
 data class AttemptStartResponse(
@@ -110,4 +124,10 @@ data class OverviewStats(
     val total_correct: Int,
     val overall_accuracy_percentage: Double,
     val recent_attempts: List<AttemptHistoryItem>
+)
+
+// ---------- V4: Personalized Learning ----------
+data class RecommendationOut(
+    val recommendation: String,
+    val weak_topics: List<String>
 )

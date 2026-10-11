@@ -1,10 +1,12 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.database import models
-from app.schemas.quiz import TopicStat, OverviewStats, AttemptHistoryItem
+from app.schemas.quiz import TopicStat, OverviewStats, AttemptHistoryItem, RecommendationOut
+from app.services.ai_service import generate_study_recommendation, AIServiceError
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -12,19 +14,12 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 WEAK_TOPIC_THRESHOLD = 60.0
 
 
-@router.get("/user/{user_id}/topics", response_model=list[TopicStat])
-def get_topic_stats(
-    user_id: int,
-    document_id: Optional[int] = Query(
-        None, description="Limit to one study material instead of all of them."
-    ),
-    db: Session = Depends(get_db),
-):
+def _compute_topic_stats(db: Session, user_id: int, document_id: Optional[int]) -> list[TopicStat]:
     """
     Aggregates every answer the user has ever submitted, grouped by the
-    question's topic, across all completed attempts. Returns weakest
-    topics first so the weakest areas surface immediately - this is the
-    "Networking > Subnetting 52% (Weak)" view from the V3 proposal.
+    question's topic, across all completed attempts. Weakest topics first.
+    user_id here always comes from the authenticated caller, never from a
+    client-supplied parameter.
     """
     query = (
         db.query(models.Answer, models.Question.topic)
@@ -62,17 +57,27 @@ def get_topic_stats(
     return stats
 
 
-@router.get("/user/{user_id}/overview", response_model=OverviewStats)
-def get_overview(
-    user_id: int,
+@router.get("/mine/topics", response_model=list[TopicStat])
+def get_my_topic_stats(
     document_id: Optional[int] = Query(
         None, description="Limit to one study material instead of all of them."
     ),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    """Overall accuracy across every completed attempt, plus the 10 most recent for a trend view."""
+    return _compute_topic_stats(db, current_user.id, document_id)
+
+
+@router.get("/mine/overview", response_model=OverviewStats)
+def get_my_overview(
+    document_id: Optional[int] = Query(
+        None, description="Limit to one study material instead of all of them."
+    ),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     query = db.query(models.Attempt).filter(
-        models.Attempt.user_id == user_id, models.Attempt.is_completed.is_(True)
+        models.Attempt.user_id == current_user.id, models.Attempt.is_completed.is_(True)
     )
 
     if document_id is not None:
@@ -98,3 +103,29 @@ def get_overview(
         overall_accuracy_percentage=round(overall_accuracy, 1),
         recent_attempts=recent,
     )
+
+
+@router.get("/mine/recommendation", response_model=RecommendationOut)
+def get_my_recommendation(
+    document_id: Optional[int] = Query(
+        None, description="Limit to one study material instead of all of them."
+    ),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    stats = _compute_topic_stats(db, current_user.id, document_id)
+
+    if not stats:
+        return RecommendationOut(
+            recommendation="Take a quiz on this material to get personalized study tips.",
+            weak_topics=[],
+        )
+
+    weak_topics = [s.topic for s in stats if s.is_weak]
+
+    try:
+        text = generate_study_recommendation(stats)
+    except AIServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return RecommendationOut(recommendation=text, weak_topics=weak_topics)
